@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BaiduPCS-Go --json output line",
+  "description": "Schema for a single JSON-lines output object emitted by BaiduPCS-Go in --json mode. The upload command emits a stream of these (one per line); login/quota/share emit a single line.",
+  "oneOf": [
+    {"$ref": "#/definitions/login"},
+    {"$ref": "#/definitions/quota"},
+    {"$ref": "#/definitions/share_set"},
+    {"$ref": "#/definitions/share_cancel"},
+    {"$ref": "#/definitions/share_list"},
+    {"$ref": "#/definitions/started"},
+    {"$ref": "#/definitions/file_progress"},
+    {"$ref": "#/definitions/file_done"},
+    {"$ref": "#/definitions/file_failed"},
+    {"$ref": "#/definitions/complete"}
+  ],
+  "definitions": {
+    "quota_object": {
+      "type": "object",
+      "required": ["total", "used", "free", "ratio"],
+      "properties": {
+        "total": {"type": "integer"},
+        "used": {"type": "integer"},
+        "free": {"type": "integer"},
+        "ratio": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "share_item": {
+      "type": "object",
+      "required": ["share_id", "expire_type", "expire_time", "view_count"],
+      "properties": {
+        "share_id": {"type": "integer"},
+        "shortlink": {"type": "string"},
+        "pwd": {"type": "string"},
+        "link_with_pwd": {"type": "string"},
+        "typical_path": {"type": "string"},
+        "expire_type": {"type": "integer"},
+        "expire_time": {"type": "integer"},
+        "valid": {"type": "string"},
+        "view_count": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "login": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "properties": {
+        "type": {"const": "login"},
+        "ok": {"type": "boolean"},
+        "username": {"type": "string"},
+        "uid": {"type": "integer"},
+        "quota": {"$ref": "#/definitions/quota_object"},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "quota": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "properties": {
+        "type": {"const": "quota"},
+        "ok": {"type": "boolean"},
+        "username": {"type": "string"},
+        "quota": {"$ref": "#/definitions/quota_object"},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "share_set": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "properties": {
+        "type": {"const": "share_set"},
+        "ok": {"type": "boolean"},
+        "share_id": {"type": "integer"},
+        "link": {"type": "string"},
+        "pwd": {"type": "string"},
+        "link_with_pwd": {"type": "string"},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "share_cancel": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "properties": {
+        "type": {"const": "share_cancel"},
+        "ok": {"type": "boolean"},
+        "share_ids": {"type": "array", "items": {"type": "integer"}},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "share_list": {
+      "type": "object",
+      "required": ["type", "ok"],
+      "properties": {
+        "type": {"const": "share_list"},
+        "ok": {"type": "boolean"},
+        "shares": {"type": "array", "items": {"$ref": "#/definitions/share_item"}},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "started": {
+      "type": "object",
+      "required": ["type", "file_count", "target_path"],
+      "properties": {
+        "type": {"const": "started"},
+        "file_count": {"type": "integer", "minimum": 0},
+        "target_path": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "file_progress": {
+      "type": "object",
+      "required": ["type", "file_id", "local_path", "save_path", "uploaded", "total", "speed", "elapsed_ms", "percent"],
+      "properties": {
+        "type": {"const": "file_progress"},
+        "file_id": {"type": "string"},
+        "local_path": {"type": "string"},
+        "save_path": {"type": "string"},
+        "uploaded": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "speed": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "percent": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "file_done": {
+      "type": "object",
+      "required": ["type", "file_id", "local_path", "save_path", "size", "elapsed_ms", "skipped"],
+      "properties": {
+        "type": {"const": "file_done"},
+        "file_id": {"type": "string"},
+        "local_path": {"type": "string"},
+        "save_path": {"type": "string"},
+        "size": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "file_failed": {
+      "type": "object",
+      "required": ["type", "file_id", "local_path", "save_path", "retries"],
+      "properties": {
+        "type": {"const": "file_failed"},
+        "file_id": {"type": "string"},
+        "local_path": {"type": "string"},
+        "save_path": {"type": "string"},
+        "error": {"type": "string"},
+        "message": {"type": "string"},
+        "retries": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "complete": {
+      "type": "object",
+      "required": ["type", "ok", "succeeded", "failed", "skipped", "total_size", "elapsed_ms"],
+      "properties": {
+        "type": {"const": "complete"},
+        "ok": {"type": "boolean"},
+        "succeeded": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "total_size": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": "integer", "minimum": 0},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

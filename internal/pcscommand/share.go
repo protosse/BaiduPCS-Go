@@ -13,18 +13,39 @@ import (
 )
 
 // RunShareSet 执行分享
-func RunShareSet(paths []string, option *baidupcs.ShareOption) {
+func RunShareSet(paths []string, option *baidupcs.ShareOption, showJSON bool) {
 	pcspaths, err := matchPathByShellPattern(paths...)
 	if err != nil {
+		if showJSON {
+			writeJSONLine(ShareSetJSON{Type: "share_set", OK: false, Error: err.Error()})
+			return
+		}
 		fmt.Println(err)
 		return
 	}
 
 	shared, err := GetBaiduPCS().ShareSet(pcspaths, option)
 	if err != nil {
+		if showJSON {
+			writeJSONLine(ShareSetJSON{Type: "share_set", OK: false, Error: err.Error()})
+			return
+		}
 		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareSet, err)
 		return
 	}
+
+	if showJSON {
+		writeJSONLine(ShareSetJSON{
+			Type:        "share_set",
+			OK:          true,
+			ShareID:     shared.ShareID,
+			Link:        shared.Link,
+			Pwd:         shared.Pwd,
+			LinkWithPwd: ComposeLinkWithPwd(shared.Link, shared.Pwd),
+		})
+		return
+	}
+
 	if option.IsCombined {
 		fmt.Printf("shareID: %d, 链接: %s?pwd=%s\n", shared.ShareID, shared.Link, shared.Pwd)
 	} else {
@@ -33,23 +54,35 @@ func RunShareSet(paths []string, option *baidupcs.ShareOption) {
 }
 
 // RunShareCancel 执行取消分享
-func RunShareCancel(shareIDs []int64) {
+func RunShareCancel(shareIDs []int64, showJSON bool) {
 	if len(shareIDs) == 0 {
+		if showJSON {
+			writeJSONLine(ShareCancelJSON{Type: "share_cancel", OK: false, Error: "没有任何 shareid"})
+			return
+		}
 		fmt.Printf("%s失败, 没有任何 shareid\n", baidupcs.OperationShareCancel)
 		return
 	}
 
 	err := GetBaiduPCS().ShareCancel(shareIDs)
 	if err != nil {
+		if showJSON {
+			writeJSONLine(ShareCancelJSON{Type: "share_cancel", OK: false, Error: err.Error()})
+			return
+		}
 		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareCancel, err)
 		return
 	}
 
+	if showJSON {
+		writeJSONLine(ShareCancelJSON{Type: "share_cancel", OK: true, ShareIDs: shareIDs})
+		return
+	}
 	fmt.Printf("%s成功\n", baidupcs.OperationShareCancel)
 }
 
 // RunShareList 执行列出分享列表
-func RunShareList(page int) {
+func RunShareList(page int, showJSON bool) {
 	if page < 1 {
 		page = 1
 	}
@@ -57,25 +90,45 @@ func RunShareList(page int) {
 	pcs := GetBaiduPCS()
 	records, err := pcs.ShareList(page)
 	if err != nil {
+		if showJSON {
+			writeJSONLine(ShareListJSON{Type: "share_list", OK: false, Error: err.Error()})
+			return
+		}
 		fmt.Printf("%s失败: %s\n", baidupcs.OperationShareList, err)
+		return
+	}
+
+	if showJSON {
+		shares := make([]ShareItemJSON, 0, len(records))
+		for _, record := range records {
+			resolveShareValid(record)
+			// 获取Passwd
+			if record.Public == 0 && record.ExpireType != -1 {
+				info, pcsError := pcs.ShareSURLInfo(record.ShareID)
+				if pcsError == nil {
+					record.Passwd = strings.TrimSpace(info.Pwd)
+				}
+			}
+			shares = append(shares, ShareItemJSON{
+				ShareID:     record.ShareID,
+				Shortlink:   record.Shortlink,
+				Pwd:         record.Passwd,
+				LinkWithPwd: ComposeLinkWithPwd(record.Shortlink, record.Passwd),
+				TypicalPath: record.TypicalPath,
+				ExpireType:  record.ExpireType,
+				ExpireTime:  record.ExpireTime,
+				Valid:       record.Valid,
+				ViewCount:   record.ViewCount,
+			})
+		}
+		writeJSONLine(ShareListJSON{Type: "share_list", OK: true, Shares: shares})
 		return
 	}
 
 	tb := pcstable.NewTable(os.Stdout)
 	tb.SetHeader([]string{"#", "ShareID", "分享链接", "提取密码", "特征目录", "特征路径", "过期时间", "浏览次数"})
 	for k, record := range records {
-		if record.ExpireType == -1 {
-			record.Valid = "已过期" // 已失效分享
-		} else {
-			if record.ExpireTime == 0 {
-				record.Valid = "永久"
-			} else {
-				tm := time.Unix(time.Now().Unix()+record.ExpireTime, 0)
-				record.Valid = tm.Format("2006/01/02 15:04:05")
-
-			}
-
-		}
+		resolveShareValid(record)
 		// 获取Passwd
 		if record.Public == 0 && record.ExpireType != -1 {
 			// 私密分享
@@ -91,4 +144,18 @@ func RunShareList(page int) {
 		tb.Append([]string{strconv.Itoa(k), strconv.FormatInt(record.ShareID, 10), record.Shortlink, record.Passwd, path.Clean(path.Dir(record.TypicalPath)), record.TypicalPath, record.Valid, strconv.Itoa(record.ViewCount)})
 	}
 	tb.Render()
+}
+
+// resolveShareValid 填充分享记录的过期时间显示字段。
+func resolveShareValid(record *baidupcs.ShareRecordInfo) {
+	if record.ExpireType == -1 {
+		record.Valid = "已过期" // 已失效分享
+		return
+	}
+	if record.ExpireTime == 0 {
+		record.Valid = "永久"
+		return
+	}
+	tm := time.Unix(time.Now().Unix()+record.ExpireTime, 0)
+	record.Valid = tm.Format("2006/01/02 15:04:05")
 }
