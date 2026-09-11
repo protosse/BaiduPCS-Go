@@ -101,25 +101,25 @@ func RunShareList(page int, showJSON bool) {
 	if showJSON {
 		shares := make([]ShareItemJSON, 0, len(records))
 		for _, record := range records {
-			resolveShareValid(record)
-			// 获取Passwd
+			item := ShareItemJSON{
+				ShareID:         record.ShareID,
+				Shortlink:       record.Shortlink,
+				TypicalPath:     record.TypicalPath,
+				ExpireType:      record.ExpireType,
+				ExpireInSeconds: record.ExpireTime,
+				ViewCount:       record.ViewCount,
+			}
+			// 私密分享需额外取提取码; 失败时在 item.error 中带出。
 			if record.Public == 0 && record.ExpireType != -1 {
 				info, pcsError := pcs.ShareSURLInfo(record.ShareID)
-				if pcsError == nil {
-					record.Passwd = strings.TrimSpace(info.Pwd)
+				if pcsError != nil {
+					item.Error = pcsError.Error()
+				} else {
+					item.Pwd = strings.TrimSpace(info.Pwd)
+					item.LinkWithPwd = ComposeLinkWithPwd(record.Shortlink, item.Pwd)
 				}
 			}
-			shares = append(shares, ShareItemJSON{
-				ShareID:     record.ShareID,
-				Shortlink:   record.Shortlink,
-				Pwd:         record.Passwd,
-				LinkWithPwd: ComposeLinkWithPwd(record.Shortlink, record.Passwd),
-				TypicalPath: record.TypicalPath,
-				ExpireType:  record.ExpireType,
-				ExpireTime:  record.ExpireTime,
-				Valid:       record.Valid,
-				ViewCount:   record.ViewCount,
-			})
+			shares = append(shares, item)
 		}
 		writeJSONLine(ShareListJSON{Type: "share_list", OK: true, Shares: shares})
 		return

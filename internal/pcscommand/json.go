@@ -104,22 +104,22 @@ type ShareCancelJSON struct {
 
 // ShareItemJSON share list 中的单个分享记录。
 type ShareItemJSON struct {
-	ShareID     int64  `json:"share_id"`
-	Shortlink   string `json:"shortlink,omitempty"`
-	Pwd         string `json:"pwd,omitempty"`
-	LinkWithPwd string `json:"link_with_pwd,omitempty"`
-	TypicalPath string `json:"typical_path,omitempty"`
-	ExpireType  int    `json:"expire_type"`
-	ExpireTime  int64  `json:"expire_time"`
-	Valid       string `json:"valid,omitempty"`
-	ViewCount   int    `json:"view_count"`
+	ShareID         int64  `json:"share_id"`
+	Shortlink       string `json:"shortlink,omitempty"`
+	Pwd             string `json:"pwd,omitempty"`
+	LinkWithPwd     string `json:"link_with_pwd,omitempty"`
+	TypicalPath     string `json:"typical_path,omitempty"`
+	ExpireType      int    `json:"expire_type"`
+	ExpireInSeconds int64  `json:"expire_in_seconds"`
+	ViewCount       int    `json:"view_count"`
+	Error           string `json:"error,omitempty"` // 取提取码失败时携带
 }
 
 // ShareListJSON share list 命令的 JSON 输出。
 type ShareListJSON struct {
 	Type   string          `json:"type"`
 	OK     bool            `json:"ok"`
-	Shares []ShareItemJSON `json:"shares,omitempty"`
+	Shares []ShareItemJSON `json:"shares"`
 	Error  string          `json:"error,omitempty"`
 }
 

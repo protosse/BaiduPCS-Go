@@ -1,0 +1,5 @@
+{"type":"started","file_count":2,"target_path":"/来自：Orcust/demo"}
+{"type":"file_progress","file_id":"0","local_path":"/tmp/orcust/a.mp4","save_path":"/来自：Orcust/demo/a.mp4","uploaded":52428800,"total":104857600,"speed":1048576,"elapsed_ms":50000,"percent":50}
+{"type":"file_done","file_id":"0","local_path":"/tmp/orcust/a.mp4","save_path":"/来自：Orcust/demo/a.mp4","size":104857600,"elapsed_ms":100000,"skipped":false}
+{"type":"file_failed","file_id":"1","local_path":"/tmp/orcust/b.mp4","save_path":"/来自：Orcust/demo/b.mp4","error":"网络错误: dial tcp: i/o timeout","message":"上传文件失败","retries":3}
+{"type":"complete","ok":false,"succeeded":1,"failed":1,"skipped":0,"total_size":104857600,"elapsed_ms":150000}

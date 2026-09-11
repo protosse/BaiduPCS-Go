@@ -28,7 +28,7 @@
     },
     "share_item": {
       "type": "object",
-      "required": ["share_id", "expire_type", "expire_time", "view_count"],
+      "required": ["share_id", "expire_type", "expire_in_seconds", "view_count"],
       "properties": {
         "share_id": {"type": "integer"},
         "shortlink": {"type": "string"},
@@ -36,9 +36,9 @@
         "link_with_pwd": {"type": "string"},
         "typical_path": {"type": "string"},
         "expire_type": {"type": "integer"},
-        "expire_time": {"type": "integer"},
-        "valid": {"type": "string"},
-        "view_count": {"type": "integer"}
+        "expire_in_seconds": {"type": "integer"},
+        "view_count": {"type": "integer"},
+        "error": {"type": "string"}
       },
       "additionalProperties": false
     },
@@ -94,7 +94,7 @@
     },
     "share_list": {
       "type": "object",
-      "required": ["type", "ok"],
+      "required": ["type", "ok", "shares"],
       "properties": {
         "type": {"const": "share_list"},
         "ok": {"type": "boolean"},

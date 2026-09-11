@@ -16,6 +16,8 @@
 - 时长字段 (`elapsed_ms`) 单位为毫秒。
 - `ratio` 为已用空间占比, 取值 `0.0 ~ 1.0`。
 - 上传 `file_id` 在一次 `upload` 运行内唯一 (从 `0` 递增的字符串)。
+- **退出码**: JSON 模式下结论由 `ok` 字段承载; 但上传失败或运行前错误 (目标目录非法、本地路径为空等) 时进程仍以**非零码退出**, 错误信息经 **stderr** 输出、不会污染 stdout。
+- **上传事件流可能提前结束**: 第二次 Ctrl+C 会 `os.Exit(130)` 而不输出 `complete`; 消费者必须把"事件流在 `complete` 之前结束"判定为异常终止。
 
 ## 1. login
 
@@ -113,7 +115,7 @@
 成功:
 
 ```json
-{"type":"share_list","ok":true,"shares":[{"share_id":1122334455,"shortlink":"https://pan.baidu.com/s/1AbCdEf","pwd":"abcd","link_with_pwd":"https://pan.baidu.com/s/1AbCdEf?pwd=abcd","typical_path":"/来自：Orcust/course","expire_type":0,"expire_time":0,"valid":"永久","view_count":3}]}
+{"type":"share_list","ok":true,"shares":[{"share_id":1122334455,"shortlink":"https://pan.baidu.com/s/1AbCdEf","pwd":"abcd","link_with_pwd":"https://pan.baidu.com/s/1AbCdEf?pwd=abcd","typical_path":"/来自：Orcust/course","expire_type":0,"expire_in_seconds":0,"view_count":3}]}
 ```
 
 失败:
@@ -122,7 +124,7 @@
 {"type":"share_list","ok":false,"error":"..."}
 ```
 
-`shares[]` 元素字段:
+`shares` 恒为数组 (可能为空 `[]`)。`shares[]` 元素字段:
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -132,9 +134,11 @@
 | `link_with_pwd` | string | `shortlink + "?pwd=" + pwd` |
 | `typical_path` | string | 特征路径 |
 | `expire_type` | int | 过期类型, `-1` 表示已失效 |
-| `expire_time` | int64 | 剩余有效秒数, `0` 表示永久 |
-| `valid` | string | 过期时间的人类可读描述 (`永久` / `已过期` / 具体时间) |
+| `expire_in_seconds` | int64 | 剩余有效秒数, `0` 表示永久 |
 | `view_count` | int | 浏览次数 |
+| `error` | string | 取提取码失败时的错误信息 (有则输出) |
+
+提取码语义: `pwd` 为空且 `error` 存在 = 取码失败; `pwd` 为空且无 `error` = 公开分享无需提取码。
 
 ## 4. upload
 

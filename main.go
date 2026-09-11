@@ -685,7 +685,17 @@ func main() {
 			Category:    "百度网盘",
 			Before:      reloadFn,
 			Action: func(c *cli.Context) error {
-				pcscommand.RunGetQuota(c.Bool("json"))
+				if c.Bool("json") {
+					username := pcscommand.GetActiveUser().Name
+					quota, err := pcscommand.FetchQuota()
+					if err != nil {
+						pcscommand.EmitJSON(pcscommand.QuotaCommandJSON{Type: "quota", OK: false, Error: err.Error()})
+						return nil
+					}
+					pcscommand.EmitJSON(pcscommand.QuotaCommandJSON{Type: "quota", OK: true, Username: username, Quota: &quota})
+					return nil
+				}
+				pcscommand.RunGetQuota()
 				return nil
 			},
 			Flags: []cli.Flag{
