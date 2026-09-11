@@ -419,6 +419,7 @@ func main() {
 			Before:   reloadFn,
 			After:    saveFunc,
 			Action: func(c *cli.Context) error {
+				showJSON := c.Bool("json") || c.IsSet("cookies")
 				var bduss, ptoken, stoken, cookies string
 				if c.IsSet("cookies") {
 					cookies = c.String("cookies")
@@ -430,6 +431,10 @@ func main() {
 					var err error
 					bduss, ptoken, stoken, cookies, err = pcscommand.RunLogin(c.String("username"), c.String("password"))
 					if err != nil {
+						if showJSON {
+							pcscommand.EmitJSON(pcscommand.LoginJSON{Type: "login", OK: false, Error: err.Error()})
+							return nil
+						}
 						fmt.Println(err)
 						return err
 					}
@@ -440,7 +445,28 @@ func main() {
 
 				baidu, err := pcsconfig.Config.SetupUserByBDUSS(bduss, ptoken, stoken, cookies)
 				if err != nil {
+					if showJSON {
+						pcscommand.EmitJSON(pcscommand.LoginJSON{Type: "login", OK: false, Error: err.Error()})
+						return nil
+					}
 					fmt.Println(err)
+					return nil
+				}
+
+				if showJSON {
+					res := pcscommand.LoginJSON{
+						Type:     "login",
+						OK:       true,
+						Username: baidu.Name,
+						UID:      baidu.UID,
+					}
+					if quota, qerr := pcscommand.FetchQuota(); qerr != nil {
+						res.OK = false
+						res.Error = qerr.Error()
+					} else {
+						res.Quota = &quota
+					}
+					pcscommand.EmitJSON(res)
 					return nil
 				}
 
@@ -471,6 +497,10 @@ func main() {
 				cli.StringFlag{
 					Name:  "cookies",
 					Usage: "使用百度 Cookies 来登录百度账号",
+				},
+				cli.BoolFlag{
+					Name:  "json",
+					Usage: "以 JSON 格式输出登录与配额校验结果 (使用 -cookies 登录时默认启用)",
 				},
 			},
 		},
@@ -655,8 +685,24 @@ func main() {
 			Category:    "百度网盘",
 			Before:      reloadFn,
 			Action: func(c *cli.Context) error {
+				if c.Bool("json") {
+					username := pcscommand.GetActiveUser().Name
+					quota, err := pcscommand.FetchQuota()
+					if err != nil {
+						pcscommand.EmitJSON(pcscommand.QuotaCommandJSON{Type: "quota", OK: false, Error: err.Error()})
+						return nil
+					}
+					pcscommand.EmitJSON(pcscommand.QuotaCommandJSON{Type: "quota", OK: true, Username: username, Quota: &quota})
+					return nil
+				}
 				pcscommand.RunGetQuota()
 				return nil
+			},
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "json",
+					Usage: "以 JSON 格式输出配额信息",
+				},
 			},
 		},
 		{
@@ -1217,6 +1263,7 @@ func main() {
 					Load:          c.Int("l"),
 					NoRapidUpload: c.Bool("norapid"),
 					Policy:        c.String("policy"),
+					JSON:          c.Bool("json"),
 				})
 				if err != nil {
 					return cli.NewExitError(err.Error(), 1)
@@ -1244,6 +1291,10 @@ func main() {
 				cli.StringFlag{
 					Name:  "policy",
 					Usage: fmt.Sprintf("对同名文件的处理策略 (default: %s), %s, %s", baidupcs.SkipPolicy, baidupcs.OverWritePolicy, baidupcs.RsyncPolicy),
+				},
+				cli.BoolFlag{
+					Name:  "json",
+					Usage: "以 JSON-lines 输出上传事件流",
 				},
 			},
 		},
@@ -1408,7 +1459,7 @@ func main() {
 							Period:     c.Int("period"),
 							IsCombined: c.Bool("f"),
 						}
-						pcscommand.RunShareSet(c.Args(), opt)
+						pcscommand.RunShareSet(c.Args(), opt, c.Bool("json"))
 						return nil
 					},
 					Flags: []cli.Flag{
@@ -1426,6 +1477,10 @@ func main() {
 							Name:  "f",
 							Usage: "输出带密码的完整链接格式",
 						},
+						cli.BoolFlag{
+							Name:  "json",
+							Usage: "以 JSON 格式输出分享结果",
+						},
 					},
 				},
 				{
@@ -1434,7 +1489,7 @@ func main() {
 					Usage:     "列出已分享文件/目录",
 					UsageText: app.Name + " share list",
 					Action: func(c *cli.Context) error {
-						pcscommand.RunShareList(c.Int("page"))
+						pcscommand.RunShareList(c.Int("page"), c.Bool("json"))
 						return nil
 					},
 					Flags: []cli.Flag{
@@ -1442,6 +1497,10 @@ func main() {
 							Name:  "page",
 							Usage: "分享列表的页数",
 							Value: 1,
+						},
+						cli.BoolFlag{
+							Name:  "json",
+							Usage: "以 JSON 格式输出分享列表",
 						},
 					},
 				},
@@ -1456,8 +1515,14 @@ func main() {
 							cli.ShowCommandHelp(c, c.Command.Name)
 							return nil
 						}
-						pcscommand.RunShareCancel(converter.SliceStringToInt64(c.Args()))
+						pcscommand.RunShareCancel(converter.SliceStringToInt64(c.Args()), c.Bool("json"))
 						return nil
+					},
+					Flags: []cli.Flag{
+						cli.BoolFlag{
+							Name:  "json",
+							Usage: "以 JSON 格式输出取消分享结果",
+						},
 					},
 				},
 			},

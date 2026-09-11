@@ -40,6 +40,10 @@ type (
 
 		UploadStatistic *UploadStatistic
 
+		// OnEvent 结构化输出事件回调. 设置后任务单元将抑制人类可读输出,
+		// 改由该回调上报上传生命周期事件 (用于 --json 等机器可读输出).
+		OnEvent func(event Event)
+
 		taskInfo *taskframework.TaskInfo
 		panDir   string
 		panFile  string
@@ -68,6 +72,34 @@ const (
 
 func (utu *UploadTaskUnit) SetTaskInfo(taskInfo *taskframework.TaskInfo) {
 	utu.taskInfo = taskInfo
+}
+
+// emitEvent 上报结构化事件; 未设置 OnEvent 时不做任何事。
+func (utu *UploadTaskUnit) emitEvent(ev Event) {
+	if utu.OnEvent == nil {
+		return
+	}
+	if ev.ID == "" {
+		ev.ID = utu.taskInfo.Id()
+	}
+	if ev.LocalPath == "" {
+		ev.LocalPath = utu.LocalFileChecksum.Path
+	}
+	if ev.SavePath == "" {
+		ev.SavePath = utu.SavePath
+	}
+	if ev.Size == 0 {
+		ev.Size = utu.LocalFileChecksum.Length
+	}
+	utu.OnEvent(ev)
+}
+
+// isSkipResult 判断任务执行结果是否为"跳过" (文件已存在等)。
+func isSkipResult(result *taskframework.TaskUnitRunResult) bool {
+	if result == nil {
+		return false
+	}
+	return result.Extra == baidupcs.SkipPolicy
 }
 
 // prepareFile 解析文件阶段
@@ -193,6 +225,7 @@ func (utu *UploadTaskUnit) rapidUpload() (isContinue bool, result *taskframework
 				if (utu.Policy == baidupcs.SkipPolicy) || (bytes.Compare(decodedMD5, utu.LocalFileChecksum.MD5) == 0) {
 					fmt.Printf("[%s] 目标文件, %s, 已存在, 跳过...\n", utu.taskInfo.Id(), utu.SavePath)
 					result.Succeed = true // 成功
+					result.Extra = baidupcs.SkipPolicy
 					return
 				}
 			}
@@ -329,6 +362,13 @@ func (utu *UploadTaskUnit) upload() (result *taskframework.TaskUnitRunResult) {
 			converter.ConvertFileSize(status.SpeedsPerSecond(), 2),
 			status.TimeElapsed(),
 		)
+		utu.emitEvent(Event{
+			Type:     EventFileProgress,
+			Uploaded: status.Uploaded(),
+			Total:    status.TotalSize(),
+			Speed:    status.SpeedsPerSecond(),
+			Elapsed:  status.TimeElapsed(),
+		})
 	})
 
 	// result
@@ -442,9 +482,30 @@ func (utu *UploadTaskUnit) OnRetry(lastRunResult *taskframework.TaskUnitRunResul
 }
 
 func (utu *UploadTaskUnit) OnSuccess(lastRunResult *taskframework.TaskUnitRunResult) {
+	utu.emitEvent(Event{
+		Type:    EventFileDone,
+		Skipped: isSkipResult(lastRunResult),
+		Message: lastRunResult.ResultMessage,
+	})
 }
 
 func (utu *UploadTaskUnit) OnFailed(lastRunResult *taskframework.TaskUnitRunResult) {
+	if isSkipResult(lastRunResult) {
+		// 跳过视为完成
+		utu.emitEvent(Event{
+			Type:    EventFileDone,
+			Skipped: true,
+			Message: lastRunResult.ResultMessage,
+		})
+	} else {
+		utu.emitEvent(Event{
+			Type:    EventFileFailed,
+			Err:     lastRunResult.Err,
+			Message: lastRunResult.ResultMessage,
+			Retries: utu.taskInfo.Retry(),
+		})
+	}
+
 	// 失败
 	if lastRunResult.Err == nil {
 		// result中不包含Err, 忽略输出
@@ -473,6 +534,7 @@ func (utu *UploadTaskUnit) runPreparedStep() *taskframework.TaskUnitRunResult {
 
 func (utu *UploadTaskUnit) Run() (result *taskframework.TaskUnitRunResult) {
 	fmt.Printf("[%s] 准备上传: %s\n", utu.taskInfo.Id(), utu.LocalFileChecksum.Path)
+	utu.emitEvent(Event{Type: EventFileStarted})
 
 	if utu.LocalFileChecksum.Length > baidupcs.MaxUploadSize {
 		fmt.Printf("[%s] 文件大小超过128G, 无法上传, 跳过...\n", utu.taskInfo.Id())

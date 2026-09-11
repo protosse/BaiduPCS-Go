@@ -33,6 +33,7 @@ type (
 		NoSplitFile     bool   // 禁用分片上传
 		Policy          string // 同名文件处理策略
 		NoFilenameCheck bool   // 禁用文件名合法性检查
+		JSON            bool   // 以 JSON-lines 输出上传事件流
 	}
 )
 
@@ -56,6 +57,25 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 		opt = &UploadOptions{}
 	}
 
+	var emitter *uploadJSONEmitter
+	if opt.JSON {
+		emitter = newUploadJSONEmitter()
+		// JSON 模式: 让既有的人读输出走 stderr, stdout 只承载 JSON。
+		// writeJSONLine 在包初始化时已捕获原始 stdout, 不受此重定向影响。
+		originalStdout := os.Stdout
+		os.Stdout = os.Stderr
+		defer func() { os.Stdout = originalStdout }()
+	}
+
+	// fail 在 JSON 模式下同时输出 complete 事件; 两种模式都返回错误以维持非零退出码。
+	fail := func(format string, a ...interface{}) error {
+		err := fmt.Errorf(format, a...)
+		if opt.JSON {
+			emitter.completeError(err)
+		}
+		return err
+	}
+
 	// 检测opt
 	if opt.Parallel <= 0 {
 		opt.Parallel = pcsconfig.Config.MaxUploadParallel
@@ -77,18 +97,18 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 
 	err := matchPathByShellPatternOnce(&savePath)
 	if err != nil {
-		return fmt.Errorf("上传文件, 获取网盘路径 %s 错误: %w", savePath, err)
+		return fail("上传文件, 获取网盘路径 %s 错误: %w", savePath, err)
 	}
 
 	switch len(localPaths) {
 	case 0:
-		return fmt.Errorf("本地路径为空")
+		return fail("本地路径为空")
 	}
 
 	// 打开上传状态
 	uploadDatabase, err := pcsupload.NewUploadingDatabase()
 	if err != nil {
-		return fmt.Errorf("打开上传未完成数据库错误: %w", err)
+		return fail("打开上传未完成数据库错误: %w", err)
 	}
 	defer uploadDatabase.Close()
 
@@ -102,17 +122,16 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 		// 统计
 		statistic = &pcsupload.UploadStatistic{}
 	)
-
 	// 优雅退出: 第一次 Ctrl+C 停止派发新任务并等待进行中的分片完成后保存进度, 第二次 Ctrl+C 强制退出
 	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\n收到退出信号, 等待进行中的分片完成 (再次 Ctrl+C 强制退出)...")
+		fmt.Fprintln(os.Stderr, "\n收到退出信号, 等待进行中的分片完成 (再次 Ctrl+C 强制退出)...")
 		executor.Stop()
 		pcsupload.GracefulStopActiveUploaders()
 		<-sigChan
-		fmt.Println("强制退出")
+		fmt.Fprintln(os.Stderr, "强制退出")
 		os.Exit(130)
 	}()
 
@@ -126,7 +145,7 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 	for k := range localPaths {
 		walkedFiles, err := pcsutil.WalkDir(localPaths[k], "")
 		if err != nil {
-			return fmt.Errorf("遍历本地路径 %s 错误: %w", localPaths[k], err)
+			return fail("遍历本地路径 %s 错误: %w", localPaths[k], err)
 		}
 
 		for k3 := range walkedFiles {
@@ -148,10 +167,11 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 			}
 			subSavePath = strings.TrimPrefix(walkedFiles[k3], localPathDir)
 			if !opt.NoFilenameCheck && !pcsutil.ChPathLegal(walkedFiles[k3]) {
-				return fmt.Errorf("%s 文件路径含有非法字符", walkedFiles[k3])
+				return fail("%s 文件路径含有非法字符", walkedFiles[k3])
 			}
 			LoadCount++
-			info := executor.Append(&pcsupload.UploadTaskUnit{
+
+			taskUnit := &pcsupload.UploadTaskUnit{
 				LocalFileChecksum: checksum.NewLocalFileChecksum(walkedFiles[k3], int(baidupcs.SliceMD5Size)),
 				SavePath:          path.Clean(savePath + baidupcs.PathSeparator + subSavePath),
 				PCS:               pcs.CopyPCS(),
@@ -162,7 +182,12 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 				NoSplitFile:       opt.NoSplitFile,
 				UploadStatistic:   statistic,
 				Policy:            opt.Policy,
-			}, opt.MaxRetry)
+			}
+			if opt.JSON {
+				taskUnit.OnEvent = emitter.onEvent
+			}
+			info := executor.Append(taskUnit, opt.MaxRetry)
+
 			if LoadCount >= opt.Load {
 				LoadCount = opt.Load
 			}
@@ -172,13 +197,21 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) error {
 
 	// 没有添加任何任务
 	if executor.Count() == 0 {
-		return fmt.Errorf("未检测到上传的文件")
+		return fail("未检测到上传的文件")
+	}
+
+	if opt.JSON {
+		emitter.started(executor.Count(), savePath)
 	}
 
 	// 设置上传文件并发数
 	executor.SetParallel(LoadCount)
 	// 执行上传任务
 	executor.Execute()
+
+	if opt.JSON {
+		emitter.complete(statistic.TotalSize())
+	}
 
 	fmt.Printf("\n")
 	fmt.Printf("上传结束, 时间: %s, 总大小: %s\n", statistic.Elapsed()/1e6*1e6, converter.ConvertFileSize(statistic.TotalSize()))
