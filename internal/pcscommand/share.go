@@ -101,12 +101,17 @@ func RunShareList(page int, showJSON bool) {
 	if showJSON {
 		shares := make([]ShareItemJSON, 0, len(records))
 		for _, record := range records {
+			expireInSeconds := record.ExpireTime
+			if record.ExpireType == -1 {
+				// 已失效: ExpireTime 不再有意义, 用 -1 与"永久(0)"区分
+				expireInSeconds = -1
+			}
 			item := ShareItemJSON{
 				ShareID:         record.ShareID,
 				Shortlink:       record.Shortlink,
 				TypicalPath:     record.TypicalPath,
 				ExpireType:      record.ExpireType,
-				ExpireInSeconds: record.ExpireTime,
+				ExpireInSeconds: expireInSeconds,
 				ViewCount:       record.ViewCount,
 			}
 			// 私密分享需额外取提取码; 失败时在 item.error 中带出。
@@ -128,7 +133,16 @@ func RunShareList(page int, showJSON bool) {
 	tb := pcstable.NewTable(os.Stdout)
 	tb.SetHeader([]string{"#", "ShareID", "分享链接", "提取密码", "特征目录", "特征路径", "过期时间", "浏览次数"})
 	for k, record := range records {
-		resolveShareValid(record)
+		if record.ExpireType == -1 {
+			record.Valid = "已过期" // 已失效分享
+		} else {
+			if record.ExpireTime == 0 {
+				record.Valid = "永久"
+			} else {
+				tm := time.Unix(time.Now().Unix()+record.ExpireTime, 0)
+				record.Valid = tm.Format("2006/01/02 15:04:05")
+			}
+		}
 		// 获取Passwd
 		if record.Public == 0 && record.ExpireType != -1 {
 			// 私密分享
@@ -144,18 +158,4 @@ func RunShareList(page int, showJSON bool) {
 		tb.Append([]string{strconv.Itoa(k), strconv.FormatInt(record.ShareID, 10), record.Shortlink, record.Passwd, path.Clean(path.Dir(record.TypicalPath)), record.TypicalPath, record.Valid, strconv.Itoa(record.ViewCount)})
 	}
 	tb.Render()
-}
-
-// resolveShareValid 填充分享记录的过期时间显示字段。
-func resolveShareValid(record *baidupcs.ShareRecordInfo) {
-	if record.ExpireType == -1 {
-		record.Valid = "已过期" // 已失效分享
-		return
-	}
-	if record.ExpireTime == 0 {
-		record.Valid = "永久"
-		return
-	}
-	tm := time.Unix(time.Now().Unix()+record.ExpireTime, 0)
-	record.Valid = tm.Format("2006/01/02 15:04:05")
 }

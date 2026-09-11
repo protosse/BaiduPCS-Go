@@ -16,7 +16,7 @@
 - 时长字段 (`elapsed_ms`) 单位为毫秒。
 - `ratio` 为已用空间占比, 取值 `0.0 ~ 1.0`。
 - 上传 `file_id` 在一次 `upload` 运行内唯一 (从 `0` 递增的字符串)。
-- **退出码**: JSON 模式下结论由 `ok` 字段承载; 但上传失败或运行前错误 (目标目录非法、本地路径为空等) 时进程仍以**非零码退出**, 错误信息经 **stderr** 输出、不会污染 stdout。
+- **退出码 (各命令组不同)**: JSON 模式下结论由 `ok` 字段承载。`upload` 在失败或运行前错误 (目标目录非法、本地路径为空等) 时进程以**非零码退出**; `login` / `quota` / `share set|list|cancel` 在 JSON 模式下**恒以 0 退出**, 失败仅由 `ok:false` + `error` 字段表示。所有错误信息经 **stderr** 输出、不污染 stdout。
 - **上传事件流可能提前结束**: 第二次 Ctrl+C 会 `os.Exit(130)` 而不输出 `complete`; 消费者必须把"事件流在 `complete` 之前结束"判定为异常终止。
 
 ## 1. login
@@ -134,7 +134,7 @@
 | `link_with_pwd` | string | `shortlink + "?pwd=" + pwd` |
 | `typical_path` | string | 特征路径 |
 | `expire_type` | int | 过期类型, `-1` 表示已失效 |
-| `expire_in_seconds` | int64 | 剩余有效秒数, `0` 表示永久 |
+| `expire_in_seconds` | int64 | 剩余有效秒数; `0` 表示永久, `-1` 表示已失效。仅当 `expire_type != -1` 时该字段才表示剩余秒数 |
 | `view_count` | int | 浏览次数 |
 | `error` | string | 取提取码失败时的错误信息 (有则输出) |
 
