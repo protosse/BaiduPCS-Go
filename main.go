@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -421,7 +422,20 @@ func main() {
 			Action: func(c *cli.Context) error {
 				showJSON := c.Bool("json") || c.IsSet("cookies")
 				var bduss, ptoken, stoken, cookies string
-				if c.IsSet("cookies") {
+				if c.Bool("stdin-secrets") {
+					reader := bufio.NewReader(os.Stdin)
+					var err error
+					bduss, err = reader.ReadString('\n')
+					if err != nil && len(bduss) == 0 {
+						return err
+					}
+					stoken, err = reader.ReadString('\n')
+					if err != nil && len(stoken) == 0 {
+						return err
+					}
+					bduss = strings.TrimSpace(bduss)
+					stoken = strings.TrimSpace(stoken)
+				} else if c.IsSet("cookies") {
 					cookies = c.String("cookies")
 				} else if c.IsSet("bduss") {
 					bduss = c.String("bduss")
@@ -501,6 +515,10 @@ func main() {
 				cli.BoolFlag{
 					Name:  "json",
 					Usage: "以 JSON 格式输出登录与配额校验结果 (使用 -cookies 登录时默认启用)",
+				},
+				cli.BoolFlag{
+					Name:  "stdin-secrets",
+					Usage: "从 stdin 读取两行 BDUSS 与 STOKEN，避免凭据出现在进程参数中",
 				},
 			},
 		},

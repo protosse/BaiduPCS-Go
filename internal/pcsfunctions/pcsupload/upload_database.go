@@ -33,7 +33,7 @@ type (
 
 // NewUploadingDatabase 初始化未完成上传的数据库, 从库中读取内容
 func NewUploadingDatabase() (ud *UploadingDatabase, err error) {
-	file, err := os.OpenFile(filepath.Join(pcsconfig.GetConfigDir(), UploadingFileName), os.O_CREATE|os.O_RDWR, 0777)
+	file, err := os.OpenFile(filepath.Join(pcsconfig.GetStateDir(), UploadingFileName), os.O_CREATE|os.O_RDWR, 0777)
 	if err != nil {
 		return nil, err
 	}

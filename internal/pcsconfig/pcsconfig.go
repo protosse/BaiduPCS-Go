@@ -18,6 +18,8 @@ import (
 const (
 	// EnvConfigDir 配置路径环境变量
 	EnvConfigDir = "BAIDUPCS_GO_CONFIG_DIR"
+	// EnvStateDir 上传断点状态目录环境变量
+	EnvStateDir = "BAIDUPCS_GO_STATE_DIR"
 	// ConfigName 配置文件名
 	ConfigName = "pcs_config.json"
 )
@@ -264,6 +266,14 @@ func (c *PCSConfig) InitDefaultConfig() {
 			c.SaveDir = filepath.Join(dataPath, "Downloads")
 		}
 	}
+}
+
+// GetStateDir 获取上传断点状态路径。
+func GetStateDir() string {
+	if dir, ok := os.LookupEnv(EnvStateDir); ok && filepath.IsAbs(dir) {
+		return dir
+	}
+	return GetConfigDir()
 }
 
 // GetConfigDir 获取配置路径
