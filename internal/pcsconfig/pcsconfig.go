@@ -271,9 +271,13 @@ func (c *PCSConfig) InitDefaultConfig() {
 // GetStateDir 获取上传断点状态路径。
 func GetStateDir() string {
 	if dir, ok := os.LookupEnv(EnvStateDir); ok && filepath.IsAbs(dir) {
-		return dir
+		if err := os.MkdirAll(dir, 0700); err == nil {
+			return dir
+		}
 	}
-	return GetConfigDir()
+	fallback := filepath.Join(GetConfigDir(), "state")
+	_ = os.MkdirAll(fallback, 0700)
+	return fallback
 }
 
 // GetConfigDir 获取配置路径
